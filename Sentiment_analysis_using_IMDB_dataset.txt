@@ -1,0 +1,186 @@
+                                                                 #---------------------STAGE-1--------------------
+import pandas as pd
+d=pd.read_csv("C:/Users/SIB/Desktop/review_25.csv",encoding='latin1') #You have to use the encoding as latin1 to read this file as there are some special character in this file, use the below code snippet to read the file.
+print(d.shape)
+print(d)
+
+label=d[['label']]
+print(label)
+
+d.describe()
+
+d['label'].value_counts()
+
+
+# Step - a : Remove blank rows if any.
+d['review'].dropna(inplace=True)
+
+# Step - b : Change all the text to lower case. This is required as python interprets 'dog' and 'DOG' differently
+d['review'] = [i.lower() for i in d['review']]
+
+# Step - c : Tokenization : In this each entry in the corpus will be broken into set of words
+from nltk.tokenize import word_tokenize
+d['review']= [word_tokenize(i) for i in d['review']]
+
+#step-d :remove stop words,non-numeric wordsby peroforming Stemming/Lemmenting
+#so it requires POS tag to understand if the word is noun or verb or adjective(bydefault it will take noun)
+from collections import defaultdict
+from nltk.corpus import wordnet as wn
+tag_word=defaultdict(lambda : wn.NOUN)
+tag_word['J']=wn.ADJ  #for adjective word
+tag_word['V']=wn.VERB #for verb word 
+tag_word['R']=wn.ADV  #for adverb word
+
+
+
+                                                            #-----------------it takes 25min(minimun)/more to compile-----------
+from nltk.stem import WordNetLemmatizer
+from nltk import pos_tag
+from nltk.corpus import stopwords
+
+
+for i,j in enumerate(d['review']):
+    result_words=[] #this empty list will contain the words that stores which follow the rules
+    word_lemmatized=WordNetLemmatizer() #initializing WordNetLemmatizer()
+    for k,l in pos_tag(j):    #pos_tag function will provide the 'tag' ie; if the word is Noun(N) OR Verb(V) or Adjective(A)
+        if k not in stopwords.words('english') and k.isalpha(): #condition is to check for stop words and consider only alphabets
+            final_word=word_lemmatized.lemmatize(k,tag_word[l[0]]) 
+            result_words.append(final_word) 
+    d.loc[i,'text_final']=str(result_words)
+
+
+
+
+
+                                                           #--------------------STAGE-2-----------------
+
+
+#prepare train and test data sets
+from sklearn.model_selection import train_test_split
+x_train,x_test,y_train,y_test=train_test_split(d['text_final'],d['label'],test_size=0.25,random_state=0)
+print('x_train:\n',x_train)  #x->data predictors
+                            #y->data target
+
+
+#Encoding( in binary format)
+from sklearn.preprocessing import LabelEncoder
+encoder=LabelEncoder()
+y_train_new =encoder.fit_transform(y_train)
+y_test_new=encoder.fit_transform(y_test)
+
+
+#word vectorization (It is a general process of turning a collection of text documents into numerical feature vectors)
+from sklearn.feature_extraction.text import TfidfVectorizer   #tfidf:term frequency -inverse document frequency
+                                                         #Term Frequency: This summarizes how often a given word appears within a document.
+                                                         #Inverse Document Frequency: This down scales words that appear a lot across documents.
+                                                         #This will help TF-IDF build a vocabulary of words which it has learned from the corpus data and it will assign a unique integer number to each of these words.
+                                                         #Their will be maximum of 5000 unique words/features as we have set parameter max_features=5000.
+
+tfidf_vect=TfidfVectorizer(max_features=5000)
+tfidf_vect.fit(d['text_final'])
+
+x_train_tfidf=tfidf_vect.transform(x_train)
+x_test_tfidf=tfidf_vect.transform(x_test)
+
+print("vocabulary that it has learned from the 'd' dataframe:\n",tfidf_vect.vocabulary_)
+
+print('\n')
+print('   ')
+print("vectorized data:\n",x_train_tfidf)
+
+
+
+
+
+movieVzer=tfidf_vect
+
+# fit and tranform using training text 
+docs_train_counts = movieVzer.fit_transform(x_train)
+
+from sklearn.feature_extraction.text import TfidfTransformer
+# Convert raw frequency counts into TF-IDF values
+movieTfmer = TfidfTransformer()
+docs_train_tfidf = movieTfmer.fit_transform(docs_train_counts)
+
+# Using the fitted vectorizer and transformer, tranform the test data
+docs_test_counts = movieVzer.transform(x_test)
+docs_test_tfidf = movieTfmer.transform(docs_test_counts)
+
+
+# Making the Confusion Matrix
+#from sklearn.metrics import confusion_matrix
+#cm = confusion_matrix(y_test, prediction_svm)
+
+
+
+
+
+
+                                                        #-----------------------do prediction----
+ #(using SVM)
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score
+
+svm1=SVC(C=1.0,kernel='linear',degree=3,gamma='auto')
+svm1.fit(docs_train_tfidf,y_train)
+
+prediction_svm=svm1.predict(docs_test_tfidf) #predict the labels on validation dataset
+
+print("Accuracy score using SVM->",accuracy_score(prediction_svm,y_test)*100)
+#print(y_train)
+
+
+
+
+ #(using naive-bayes classification)
+from sklearn.naive_bayes import MultinomialNB
+
+naive=MultinomialNB()
+naive.fit(docs_train_tfidf,y_train)
+
+prediction_nb=naive.predict(docs_test_tfidf)  #predict the labels on validation dataset
+
+print("Accuracy score using Naive_Bayes classifier->",accuracy_score(prediction_nb,y_test)*100)
+ 
+ 
+
+
+ #(using decision tree algorithm)
+#from sklearn.tree import DecisionTreeClassifier
+
+#dc=DecisionTreeClassifier()
+#dc.fit(x_train_tfidf,y_train)
+
+#prediction_dta=dc.predict(x_test_tfidf)
+
+#from sklearn import metrics
+
+#print("Accuracy score using decision tree algorithm->",accuracy_score(prediction_dta,y_test))
+
+
+#from nltk.corpus import wordnet as wn
+#sysn=wn.synsets("program")
+#print("synonyms of the program:")
+
+
+
+
+
+
+
+
+
+
+                                                    #--------------------Testing-------------------
+
+
+
+# Convert raw frequency counts into TF-IDF values
+#k=input("enter your review")
+movieTfmer = TfidfTransformer()
+movieTfmer.fit_transform(docs_train_counts)
+rev=['''I will divide my review into following 5 categories each accounting a maximum of 100%(if perfect) ________________________________________________________________ <br /><br />Visual Pleasure:[100%] This is extremely pleasing movie visually. I had a great time watching it. Golfing scenes are very well shot and the dramatic effects on the green were quite amazing. I also loved seeing the old wooden golf clubs and the bag.<br /><br />Director's Work:[70%] Bill Paxton is more associated to acting but this film shows he's got talent. Did a decent job.<br /><br />Acting:[90%] Shia LeBeouf was very good in his role of Francis Ouimet(this guy can ACT well). The rest of the cast was also good.<br /><br />Entertainment Value:[100%] I enjoyed every minute of it. It was overwhelmingly entertaining.<br /><br />Script:[91%] Based on a true story and therefore it makes the film that much more special. It was intriguing right from the start and loved every scene till the very end.<br /><br />__________________________________________________________________ <br /><br />My Advice: Definitely a MUST watch for all the Sports lovers especially Golf(You all will love it). Anyone who is looking for a nice entertaining movie and doesn't hate Sports can watch it. <br /><br />_____ <br /><br />10/10''']
+rev2=tfidf_vect.transform(rev)
+rev3=movieTfmer.transform(rev2)
+pred = svm1.predict(rev3)
+pred
